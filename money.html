@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>台語語料庫 - 校正薪資</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body {
+            font-family: "Playfair Display", serif;
+            background-color: #f4f1ea;
+            text-align: center;
+            padding: 50px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+        input, select, button {
+            padding: 10px;
+            font-size: 16px;
+            margin: 5px;
+            text-align: center;
+        }
+        button {
+            background: linear-gradient(135deg, #6a11cb, #2575fc);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: linear-gradient(135deg, #2575fc, #6a11cb);
+            transform: translateY(-3px);
+        }
+        table {
+            width: 80%;
+            margin-top: 20px;
+            border-collapse: collapse;
+            text-align: center;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>台語語料庫 - 校正薪資</h2>
+        <p>結算至：</p>
+        <input type="month" id="settlementDate">
+        <p>請輸入每項目字數：</p>
+        <div id="items"></div>
+        <button onclick="addItem()">新增項目</button>
+        <br>
+        <label>薪資計算方式：</label>
+        <select id="rate">
+            <option value="0.4">0.4 元/字</option>
+            <option value="0.6">0.6 元/字</option>
+        </select>
+        <br>
+        <button onclick="calculateSalary()">確認</button>
+        <button onclick="exportToExcel()">匯出 Excel</button>
+        <table id="salaryTable">
+            <thead>
+                <tr>
+                    <th>結算</th>
+                    <th>紀錄</th>
+                    <th>字數</th>
+                    <th>薪資</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <script>
+        let itemsContainer = document.getElementById("items");
+        let salaryTable = document.getElementById("salaryTable").getElementsByTagName("tbody")[0];
+        let records = JSON.parse(localStorage.getItem("salaryRecords")) || [];
+        renderTable();
+        
+        function addItem() {
+            let div = document.createElement("div");
+            div.innerHTML = '<input type="number" min="1" placeholder="輸入字數">';
+            div.style.textAlign = "center";
+            itemsContainer.appendChild(div);
+        }
+        
+        function calculateSalary() {
+            let wordCounts = [...itemsContainer.getElementsByTagName("input")].map(input => parseInt(input.value) || 0);
+            let totalWords = wordCounts.reduce((a, b) => a + b, 0);
+            let rate = parseFloat(document.getElementById("rate").value);
+            let salary = Math.round(totalWords * rate);
+            let settlementDate = document.getElementById("settlementDate").value;
+            let timestamp = new Date().toLocaleString();
+            
+            let record = { settlementDate, timestamp, wordCounts, totalWords, salary: `NT$ ${salary} 元` };
+            records.push(record);
+            localStorage.setItem("salaryRecords", JSON.stringify(records));
+            renderTable();
+        }
+        
+        function renderTable() {
+            salaryTable.innerHTML = "";
+            records.forEach((record, index) => {
+                let row = salaryTable.insertRow();
+                row.insertCell(0).innerText = record.settlementDate;
+                row.insertCell(1).innerText = record.timestamp;
+                row.insertCell(2).innerText = record.totalWords;
+                row.insertCell(3).innerText = record.salary;
+                let actionsCell = row.insertCell(4);
+                actionsCell.innerHTML = `<button onclick="editRecord(${index})">編輯</button> <button onclick="deleteRecord(${index})">刪除</button>`;
+            });
+        }
+        
+        function editRecord(index) {
+            let record = records[index];
+            
+            // 填充原始数据到输入框
+            document.getElementById("settlementDate").value = record.settlementDate;
+            itemsContainer.innerHTML = ''; // 清空现有的项目输入框
+            
+            // 恢复每个项目的字数
+            if (record.wordCounts && record.wordCounts.length > 0) {
+                record.wordCounts.forEach(count => {
+                    let div = document.createElement("div");
+                    div.innerHTML = `<input type="number" min="1" value="${count}" placeholder="輸入字數">`;
+                    div.style.textAlign = "center";
+                    itemsContainer.appendChild(div);
+                });
+            } else {
+                // 如果没有记录，添加一个空的输入框
+                addItem();
+            }
+            
+            // 修改确认按钮的功能
+            let confirmButton = document.querySelector('button[onclick="calculateSalary()"]');
+            confirmButton.onclick = function() {
+                let wordCounts = [...itemsContainer.getElementsByTagName("input")].map(input => parseInt(input.value) || 0);
+                let totalWords = wordCounts.reduce((a, b) => a + b, 0);
+                let rate = parseFloat(document.getElementById("rate").value);
+                let salary = Math.round(totalWords * rate);
+                let settlementDate = document.getElementById("settlementDate").value;
+                
+                // 更新记录
+                records[index].settlementDate = settlementDate;
+                records[index].wordCounts = wordCounts;
+                records[index].totalWords = totalWords;
+                records[index].salary = `NT$ ${salary} 元`;
+                
+                localStorage.setItem("salaryRecords", JSON.stringify(records));
+                renderTable();
+                
+                // 恢复确认按钮的原始功能
+                confirmButton.onclick = calculateSalary;
+            };
+        }
+        
+        function deleteRecord(index) {
+            if (confirm("確定要刪除此筆記錄嗎？")) {
+                records.splice(index, 1);
+                localStorage.setItem("salaryRecords", JSON.stringify(records));
+                renderTable();
+            }
+        }
+        
+        function exportToExcel() {
+            let wb = XLSX.utils.book_new();
+            let wsData = records.map(record => ({
+                結算: record.settlementDate,
+                紀錄: record.timestamp,
+                字數: record.totalWords,
+                薪資: `NT$ ${Math.round(record.totalWords * parseFloat(document.getElementById("rate").value))} 元`
+            }));
+            let ws = XLSX.utils.json_to_sheet(wsData);
+            XLSX.utils.book_append_sheet(wb, ws, "薪資記錄");
+            XLSX.writeFile(wb, "校正薪資.xlsx");
+        }
+    </script>
+</body>
+</html>
